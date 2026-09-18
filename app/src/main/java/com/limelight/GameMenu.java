@@ -53,6 +53,18 @@ public class GameMenu implements Game.GameMenuCallbacks {
         public MenuOption(String label, Runnable runnable) {
             this(label, false, runnable);
         }
+
+        public String getLabel() {
+            return label;
+        }
+
+        public boolean isWithGameFocus() {
+            return withGameFocus;
+        }
+
+        public Runnable getRunnable() {
+            return runnable;
+        }
     }
 
     private final Game game;
@@ -152,7 +164,26 @@ public class GameMenu implements Game.GameMenuCallbacks {
         }
     }
 
-    private void showSpecialKeysMenu() {
+    // Public entry points used by the side overlay menu (GameSideMenu)
+    public void showSelectMouseMode() {
+        game.selectMouseMode(dialogScreenContext);
+    }
+
+    public void showServerCmdMenu() {
+        ArrayList<String> serverCmds = game.getServerCmds();
+        if (serverCmds.isEmpty()) {
+            int themeResId = game.getApplicationInfo().theme;
+            Context themedContext = new ContextThemeWrapper(dialogScreenContext, themeResId);
+            new AlertDialog.Builder(themedContext)
+                    .setTitle(R.string.game_dialog_title_server_cmd_empty)
+                    .setMessage(R.string.game_dialog_message_server_cmd_empty)
+                    .show();
+        } else {
+            showServerCmd(serverCmds);
+        }
+    }
+
+    public void showSpecialKeysMenu() {
         List<MenuOption> options = new ArrayList<>();
 
         if(!PreferenceConfiguration.readPreferences(game).disableDefaultExtraKeys){
@@ -300,18 +331,8 @@ public class GameMenu implements Game.GameMenuCallbacks {
 
         options.add(new MenuOption(getString(R.string.game_menu_server_cmd), true,
                 () -> {
-                    ArrayList<String> serverCmds = game.getServerCmds();
-                    if (serverCmds.isEmpty()) {
-                        int themeResId = game.getApplicationInfo().theme;
-                        Context themedContext = new ContextThemeWrapper(dialogScreenContext, themeResId);
-                        new AlertDialog.Builder(themedContext)
-                                .setTitle(R.string.game_dialog_title_server_cmd_empty)
-                                .setMessage(R.string.game_dialog_message_server_cmd_empty)
-                                .show();
-                    } else {
-                        hideMenu();
-                        this.showServerCmd(serverCmds);
-                    }
+                    hideMenu();
+                    this.showServerCmdMenu();
                 }));
 
         options.add(new MenuOption(getString(R.string.game_menu_toggle_keyboard), true,

@@ -4,7 +4,11 @@
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:padding="16dp"
-    android:background="?android:attr/selectableItemBackground"
+    android:layout_marginTop="4dp"
+    android:layout_marginBottom="4dp"
+    android:background="@drawable/ps_tile"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
     android:gravity="center_vertical">
 
     <LinearLayout

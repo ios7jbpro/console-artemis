@@ -7,7 +7,6 @@
     <PreferenceCategory
         android:key="category_video_settings"
         android:title="@string/category_video_settings"
-        app:initialExpandedChildrenCount="3"
         app:iconSpaceReserved="false">
         <ListPreference
             android:defaultValue="1280x720"
@@ -220,6 +219,7 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        android:key="category_audio_settings"
         android:title="@string/category_audio_settings"
         app:iconSpaceReserved="false">
         <ListPreference
@@ -241,7 +241,6 @@
     <PreferenceCategory
         android:key="category_gamepad_settings"
         android:title="@string/category_gamepad_settings"
-        app:initialExpandedChildrenCount="1"
         app:iconSpaceReserved="false">
         <com.limelight.preferences.SeekBarPreference
             android:defaultValue="5"
@@ -363,7 +362,6 @@
     <PreferenceCategory
         android:key="category_input_settings"
         android:title="@string/category_input_settings"
-        app:initialExpandedChildrenCount="1"
         app:iconSpaceReserved="false">
         <ListPreference
             android:defaultValue="0"
@@ -489,6 +487,7 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        android:key="category_host_settings"
         android:title="@string/category_host_settings"
         app:iconSpaceReserved="false">
         <CheckBoxPreference
@@ -506,8 +505,8 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        android:key="category_general_settings"
         android:title="@string/category_general_settings"
-        app:initialExpandedChildrenCount="1"
         app:iconSpaceReserved="false">
 
         <CheckBoxPreference
@@ -533,7 +532,6 @@
     <PreferenceCategory
         android:key="category_ui_settings"
         android:title="@string/category_ui_settings"
-        app:initialExpandedChildrenCount="3"
         app:iconSpaceReserved="false">
         <CheckBoxPreference
             android:defaultValue="false"
@@ -654,7 +652,6 @@
     <PreferenceCategory
         android:key="category_onscreen_controls"
         android:title="@string/category_on_screen_controls_settings"
-        app:initialExpandedChildrenCount="1"
         app:iconSpaceReserved="false">
         <CheckBoxPreference
             android:defaultValue="false"
@@ -744,7 +741,6 @@
     <PreferenceCategory
         android:key="category_special_key_layout"
         android:title="@string/title_special_key_layout"
-        app:initialExpandedChildrenCount="1"
         app:iconSpaceReserved="false">
 
         <CheckBoxPreference
@@ -814,7 +810,6 @@
     <PreferenceCategory
         android:key="category_virtual_trackpad_settings"
         android:title="@string/title_virtual_trackpad_settings"
-        app:initialExpandedChildrenCount="1"
         app:iconSpaceReserved="false">
 
         <CheckBoxPreference
@@ -891,7 +886,6 @@
     <PreferenceCategory
         android:key="category_perf_monitor_settings"
         android:title="@string/category_perf_monitor_settings"
-        app:initialExpandedChildrenCount="1"
         app:iconSpaceReserved="false">
         <CheckBoxPreference
             android:defaultValue="false"
@@ -945,7 +939,6 @@
     <PreferenceCategory
         android:key="category_advanced_settings"
         android:title="@string/category_advanced_settings"
-        app:initialExpandedChildrenCount="1"
         app:iconSpaceReserved="false">
         <ListPreference
             android:defaultValue="auto"
@@ -984,7 +977,6 @@
     <PreferenceCategory
         android:key="category_settings_misc"
         android:title="@string/title_settings_misc"
-        app:initialExpandedChildrenCount="1"
         app:iconSpaceReserved="false">
 
         <com.limelight.preferences.LanguagePreference

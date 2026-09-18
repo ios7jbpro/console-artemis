@@ -4,7 +4,6 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.UnknownHostException;
 
-import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 import com.limelight.binding.PlatformBinding;
 import com.limelight.binding.crypto.AndroidCryptoProvider;
 import com.limelight.computers.ComputerManagerListener;
@@ -22,8 +21,6 @@ import com.limelight.preferences.GlPreferences;
 import com.limelight.preferences.PreferenceConfiguration;
 import com.limelight.preferences.StreamSettings;
 import com.limelight.profiles.ProfilesManager;
-import com.limelight.ui.AdapterFragment;
-import com.limelight.ui.AdapterFragmentCallbacks;
 import com.limelight.utils.Dialog;
 import com.limelight.utils.HelpLauncher;
 import com.limelight.utils.ServerHelper;
@@ -52,15 +49,13 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ContextMenu.ContextMenuInfo;
 import android.view.View.OnClickListener;
-import android.widget.AbsListView;
-import android.widget.AdapterView;
-import android.widget.AdapterView.OnItemClickListener;
 import android.widget.EditText;
+import android.widget.HorizontalScrollView;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
+import android.widget.TextView;
 import android.widget.Toast;
-import android.widget.AdapterView.AdapterContextMenuInfo;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.preference.PreferenceManager;
@@ -70,9 +65,27 @@ import org.xmlpull.v1.XmlPullParserException;
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
-public class PcView extends AppCompatActivity implements AdapterFragmentCallbacks {
+public class PcView extends AppCompatActivity {
     private RelativeLayout noPcFoundLayout;
     private PcGridAdapter pcGridAdapter;
+    private LinearLayout pcRow;
+    private HorizontalScrollView pcRowScroller;
+    private TextView pcFocusedName;
+    private TextView pcFocusedStatus;
+    private TextView psClock;
+    private ComputerObject contextMenuComputer;
+    private String focusedUuid;
+    private final android.os.Handler clockHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable clockTick = new Runnable() {
+        @Override
+        public void run() {
+            if (psClock != null) {
+                psClock.setText(android.text.format.DateFormat.getTimeFormat(PcView.this)
+                        .format(new java.util.Date()));
+            }
+            clockHandler.postDelayed(this, 20000);
+        }
+    };
     private ShortcutHelper shortcutHelper;
     private ComputerManagerService.ComputerManagerBinder managerBinder;
     private boolean freezeUpdates, runningPolling, inForeground, completeOnCreateCalled;
@@ -137,6 +150,15 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
     private final static int OPEN_MANAGEMENT_PAGE_ID = 20;
     private final static int PAIR_ID_OTP = 21;
 
+    // Built-in fake hosts for testing UI without a real server.
+    // Several entries are added so grid/row layouts can be exercised.
+    public static final String TEST_MODE_PC_UUID_PREFIX = "TEST-MODE-PC-";
+    private static final int TEST_MODE_PC_COUNT = 6;
+
+    public static boolean isTestModeComputer(String uuid) {
+        return uuid != null && uuid.startsWith(TEST_MODE_PC_UUID_PREFIX);
+    }
+
     private void initializeViews() {
         setContentView(R.layout.activity_pc_view);
 
@@ -157,7 +179,7 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         ImageButton settingsButton = findViewById(R.id.settingsButton);
         ImageButton addComputerButton = findViewById(R.id.manuallyAddPc);
         ImageButton helpButton = findViewById(R.id.helpButton);
-        ExtendedFloatingActionButton profilesButton = findViewById(R.id.profilesButton);
+        ImageButton profilesButton = findViewById(R.id.profilesButton);
 
         settingsButton.setOnClickListener(new OnClickListener() {
             @Override
@@ -192,18 +214,246 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
             helpButton.setVisibility(View.GONE);
         }
 
-        getFragmentManager().beginTransaction()
-            .replace(R.id.pcFragmentContainer, new AdapterFragment())
-            .commitAllowingStateLoss();
+        UiHelper.applyStatusBarPadding(findViewById(R.id.psTopBar));
+
+        pcRow = findViewById(R.id.pcRow);
+        pcRowScroller = findViewById(R.id.pcRowScroller);
+        pcFocusedName = findViewById(R.id.pcFocusedName);
+        pcFocusedStatus = findViewById(R.id.pcFocusedStatus);
+        psClock = findViewById(R.id.psClock);
 
         noPcFoundLayout = findViewById(R.id.no_pc_found_layout);
+        refreshPcRow();
+        // Seed the built-in test entries immediately so the row is never
+        // empty while waiting for real host discovery.
+        ensureTestModeComputers();
+        startClock();
+    }
+
+    private void startClock() {
+        clockHandler.removeCallbacks(clockTick);
+        clockHandler.post(clockTick);
+    }
+
+    private void stopClock() {
+        clockHandler.removeCallbacks(clockTick);
+    }
+
+    // Syncs the horizontal host row with the adapter without detaching
+    // unchanged tiles, so focus, scale and scroll position survive the
+    // frequent polling updates instead of jumping around.
+    private void refreshPcRow() {
+        if (pcRow == null) {
+            return;
+        }
+
+        float density = getResources().getDisplayMetrics().density;
+        int tileMargin = (int) (10 * density + 0.5f);
+
+        // 1. Drop tiles whose computer is gone
+        java.util.HashSet<String> currentUuids = new java.util.HashSet<>();
+        for (int i = 0; i < pcGridAdapter.getCount(); i++) {
+            currentUuids.add(((ComputerObject) pcGridAdapter.getItem(i)).details.uuid);
+        }
+        for (int i = pcRow.getChildCount() - 1; i >= 0; i--) {
+            View child = pcRow.getChildAt(i);
+            ComputerObject tag = (ComputerObject) child.getTag();
+            if (tag == null || !currentUuids.contains(tag.details.uuid)) {
+                pcRow.removeViewAt(i);
+            }
+        }
+
+        // 2. Add new tiles, refresh existing ones in place
+        for (int i = 0; i < pcGridAdapter.getCount(); i++) {
+            final ComputerObject computer = (ComputerObject) pcGridAdapter.getItem(i);
+            View tile = findPcTile(computer.details.uuid);
+            if (tile == null) {
+                tile = pcGridAdapter.getView(i, null, pcRow);
+                tile.setFocusable(true);
+                tile.setFocusableInTouchMode(true);
+                tile.setBackgroundResource(R.drawable.ps_tile);
+
+                // Icon-only square tile: the name lives in the big title below
+                View tileText = tile.findViewById(R.id.grid_text);
+                if (tileText != null) {
+                    tileText.setVisibility(View.GONE);
+                }
+                View tileImage = tile.findViewById(R.id.grid_image);
+                if (tileImage != null) {
+                    int iconSize = (int) (84 * density + 0.5f);
+                    android.view.ViewGroup.LayoutParams imageParams = tileImage.getLayoutParams();
+                    imageParams.width = iconSize;
+                    imageParams.height = iconSize;
+                    tileImage.setLayoutParams(imageParams);
+                }
+                tile.setTag(computer);
+
+                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT);
+                params.setMargins(tileMargin, tileMargin, tileMargin, tileMargin);
+                tile.setLayoutParams(params);
+
+                tile.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+                    @Override
+                    public void onFocusChange(View v, boolean hasFocus) {
+                        if (hasFocus) {
+                            focusedUuid = computer.details.uuid;
+                            updatePcFocus(computer);
+                            v.animate().scaleX(1.12f).scaleY(1.12f).setDuration(150).start();
+                            // Center the focused tile in the row
+                            pcRowScroller.smoothScrollTo(
+                                    v.getLeft() - (pcRowScroller.getWidth() - v.getWidth()) / 2, 0);
+                        } else {
+                            v.animate().scaleX(1.0f).scaleY(1.0f).setDuration(150).start();
+                        }
+                    }
+                });
+                tile.setOnClickListener(new OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        handlePcClick(computer);
+                    }
+                });
+                tile.setOnLongClickListener(new View.OnLongClickListener() {
+                    @Override
+                    public boolean onLongClick(View v) {
+                        contextMenuComputer = computer;
+                        v.showContextMenu();
+                        return true;
+                    }
+                });
+                registerForContextMenu(tile);
+
+                pcRow.addView(tile, Math.min(i, pcRow.getChildCount()));
+            }
+            else {
+                // Refresh contents in place (online state, lock overlay, spinner)
+                pcGridAdapter.getView(i, tile, pcRow);
+                tile.setTag(computer);
+                if (pcRow.indexOfChild(tile) != i) {
+                    pcRow.removeView(tile);
+                    pcRow.addView(tile, Math.min(i, pcRow.getChildCount()));
+                }
+            }
+        }
+
         if (pcGridAdapter.getCount() == 0) {
             noPcFoundLayout.setVisibility(View.VISIBLE);
+            pcFocusedName.setText("");
+            pcFocusedStatus.setText("");
         }
         else {
             noPcFoundLayout.setVisibility(View.INVISIBLE);
+
+            // Refresh the title if the focused computer's data changed
+            View focused = getCurrentFocus();
+            if (focused != null && focused.getTag() instanceof ComputerObject) {
+                ComputerObject focusedComputer = (ComputerObject) focused.getTag();
+                focusedUuid = focusedComputer.details.uuid;
+                updatePcFocus(focusedComputer);
+            }
         }
+
+        ensureRowFocus();
+    }
+
+    private View findPcTile(String uuid) {
+        for (int i = 0; i < pcRow.getChildCount(); i++) {
+            View child = pcRow.getChildAt(i);
+            ComputerObject tag = (ComputerObject) child.getTag();
+            if (tag != null && uuid.equals(tag.details.uuid)) {
+                return child;
+            }
+        }
+        return null;
+    }
+
+    // Guarantees a row tile holds focus whenever the row is non-empty and
+    // nothing inside it is focused (initial load, return from another
+    // activity, or a rebuild that detached the focused tile).
+    private void ensureRowFocus() {
+        if (pcRow == null || pcRow.getChildCount() == 0) {
+            return;
+        }
+        View focused = getCurrentFocus();
+        if (focused != null) {
+            android.view.ViewParent parent = focused.getParent();
+            while (parent != null) {
+                if (parent == pcRow) {
+                    return;
+                }
+                parent = parent.getParent();
+            }
+        }
+        View target = null;
+        View firstTile = null;
+        for (int i = 0; i < pcRow.getChildCount(); i++) {
+            View child = pcRow.getChildAt(i);
+            if (firstTile == null) {
+                firstTile = child;
+            }
+            ComputerObject tag = (ComputerObject) child.getTag();
+            if (tag != null && tag.details.uuid.equals(focusedUuid)) {
+                target = child;
+                break;
+            }
+        }
+        if (target == null) {
+            target = firstTile;
+        }
+        if (target != null) {
+            if (!target.requestFocus()) {
+                final View retry = target;
+                pcRow.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        retry.requestFocus();
+                    }
+                });
+            }
+        }
+
         pcGridAdapter.notifyDataSetChanged();
+    }
+
+    private void updatePcFocus(ComputerObject computer) {
+        if (pcFocusedName == null) {
+            return;
+        }
+        pcFocusedName.setText(computer.details.name);
+        if (isTestModeComputer(computer.details.uuid)) {
+            pcFocusedStatus.setText(R.string.ps_status_test);
+            return;
+        }
+        switch (computer.details.state) {
+            case ONLINE:
+                pcFocusedStatus.setText(R.string.pcview_menu_header_online);
+                break;
+            case OFFLINE:
+                pcFocusedStatus.setText(R.string.pcview_menu_header_offline);
+                break;
+            default:
+                pcFocusedStatus.setText(R.string.pcview_menu_header_unknown);
+                break;
+        }
+    }
+
+    private void handlePcClick(ComputerObject computer) {
+        if (isTestModeComputer(computer.details.uuid)) {
+            // Test entries open a fake app list for UI testing (no host)
+            doAppList(computer.details, false, false);
+        } else if (computer.details.state == ComputerDetails.State.UNKNOWN ||
+            computer.details.state == ComputerDetails.State.OFFLINE) {
+            // Open the context menu if a PC is offline or refreshing
+            contextMenuComputer = computer;
+            pcRow.showContextMenu();
+        } else if (computer.details.pairState != PairState.PAIRED) {
+            // Pair an unpaired machine by default
+            doPair(computer.details, null, null);
+        } else {
+            doAppList(computer.details, false, false);
+        }
     }
 
     @Override
@@ -343,7 +593,7 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
     }
 
     private void refreshProfileButton() {
-        ExtendedFloatingActionButton profilesButton = findViewById(R.id.profilesButton);
+        ImageButton profilesButton = findViewById(R.id.profilesButton);
         // User report Samsung and Xiaomi devices have this problem
         // Why just these two brands have the most problems?
         if (profilesButton == null) {
@@ -351,10 +601,12 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         }
         String activeProfileName = ProfilesManager.getInstance().getActiveName();
         if (activeProfileName.isEmpty()) {
-            profilesButton.shrink();
+            profilesButton.setContentDescription(getString(R.string.profile_manager_choose_profile));
+            profilesButton.setAlpha(0.55f);
         } else {
-            profilesButton.setText(activeProfileName);
-            profilesButton.extend();
+            profilesButton.setContentDescription(
+                    getString(R.string.profile_manager_choose_profile) + ": " + activeProfileName);
+            profilesButton.setAlpha(1.0f);
         }
     }
 
@@ -378,6 +630,15 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
 
         inForeground = true;
         startComputerUpdates();
+        startClock();
+        if (pcRow != null) {
+            pcRow.post(new Runnable() {
+                @Override
+                public void run() {
+                    ensureRowFocus();
+                }
+            });
+        }
     }
 
     @Override
@@ -386,6 +647,7 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
 
         inForeground = false;
         stopComputerUpdates(false);
+        stopClock();
     }
 
     @Override
@@ -402,8 +664,10 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         // Call superclass
         super.onCreateContextMenu(menu, v, menuInfo);
 
-        AdapterContextMenuInfo info = (AdapterContextMenuInfo) menuInfo;
-        ComputerObject computer = (ComputerObject) pcGridAdapter.getItem(info.position);
+        final ComputerObject computer = contextMenuComputer;
+        if (computer == null) {
+            return;
+        }
 
         // Add a header with PC status details
         menu.clearHeader();
@@ -711,6 +975,42 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         }).start();
     }
 
+    // Adds the built-in "Test mode" entries to the PC grid if they aren't there yet.
+    // They look like paired, online hosts but require no server behind them.
+    private void ensureTestModeComputers() {
+        boolean added = false;
+        for (int n = 1; n <= TEST_MODE_PC_COUNT; n++) {
+            String uuid = TEST_MODE_PC_UUID_PREFIX + n;
+            boolean present = false;
+            for (int i = 0; i < pcGridAdapter.getCount(); i++) {
+                ComputerObject computer = (ComputerObject) pcGridAdapter.getItem(i);
+                if (uuid.equals(computer.details.uuid)) {
+                    present = true;
+                    break;
+                }
+            }
+            if (!present) {
+                ComputerDetails testDetails = new ComputerDetails();
+                testDetails.name = n == 1 ? "Test mode" : "Test mode " + n;
+                testDetails.uuid = uuid;
+                testDetails.state = ComputerDetails.State.ONLINE;
+                testDetails.pairState = PairState.PAIRED;
+                pcGridAdapter.addComputer(new ComputerObject(testDetails));
+                added = true;
+            }
+        }
+
+        if (added) {
+            // Remove the "Discovery in progress" view
+            if (noPcFoundLayout != null) {
+                noPcFoundLayout.setVisibility(View.INVISIBLE);
+            }
+
+            pcGridAdapter.notifyDataSetChanged();
+            refreshPcRow();
+        }
+    }
+
     private void doAppList(ComputerDetails computer, boolean newlyPaired, boolean showHiddenGames) {
         if (computer.state == ComputerDetails.State.OFFLINE) {
             Toast.makeText(PcView.this, getResources().getString(R.string.error_pc_offline), Toast.LENGTH_SHORT).show();
@@ -731,8 +1031,15 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
 
     @Override
     public boolean onContextItemSelected(MenuItem item) {
-        AdapterContextMenuInfo info = (AdapterContextMenuInfo) item.getMenuInfo();
-        final ComputerObject computer = (ComputerObject) pcGridAdapter.getItem(info.position);
+        final ComputerObject computer = contextMenuComputer;
+        if (computer == null) {
+            return super.onContextItemSelected(item);
+        }
+        if (isTestModeComputer(computer.details.uuid)) {
+            // The test entries have no real host behind them, so host actions don't apply
+            Toast.makeText(PcView.this, "Not available in Test mode", Toast.LENGTH_SHORT).show();
+            return true;
+        }
         switch (item.getItemId()) {
             case PAIR_ID:
                 doPair(computer.details, null, null);
@@ -842,11 +1149,7 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
 
                 pcGridAdapter.removeComputer(computer);
                 pcGridAdapter.notifyDataSetChanged();
-
-                if (pcGridAdapter.getCount() == 0) {
-                    // Show the "Discovery in progress" view
-                    noPcFoundLayout.setVisibility(View.VISIBLE);
-                }
+                refreshPcRow();
 
                 break;
             }
@@ -880,35 +1183,11 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
 
         // Notify the view that the data has changed
         pcGridAdapter.notifyDataSetChanged();
-    }
 
-    @Override
-    public int getAdapterFragmentLayoutId() {
-        return R.layout.pc_grid_view;
-    }
+        // Keep the built-in test entries around across refreshes
+        ensureTestModeComputers();
 
-    @Override
-    public void receiveAbsListView(AbsListView listView) {
-        listView.setAdapter(pcGridAdapter);
-        listView.setOnItemClickListener(new OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> arg0, View arg1, int pos,
-                                    long id) {
-                ComputerObject computer = (ComputerObject) pcGridAdapter.getItem(pos);
-                if (computer.details.state == ComputerDetails.State.UNKNOWN ||
-                    computer.details.state == ComputerDetails.State.OFFLINE) {
-                    // Open the context menu if a PC is offline or refreshing
-                    openContextMenu(arg1);
-                } else if (computer.details.pairState != PairState.PAIRED) {
-                    // Pair an unpaired machine by default
-                    doPair(computer.details, null, null);
-                } else {
-                    doAppList(computer.details, false, false);
-                }
-            }
-        });
-        UiHelper.applyStatusBarPadding(listView);
-        registerForContextMenu(listView);
+        refreshPcRow();
     }
 
     public static class ComputerObject {

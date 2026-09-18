@@ -116,4 +116,7 @@
         android:visibility="gone"
         android:elevation="9999dp" />
 
+    <!-- Console-style side overlay menu (GameSideMenu) -->
+    <include layout="@layout/game_side_menu" />
+
 </merge>

@@ -267,6 +267,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     public static final String EXTRA_VDISPLAY = "VirtualDisplay";
     public static final String EXTRA_SERVER_COMMANDS = "ServerCommands";
     public static final String EXTRA_DISPLAY_ID = "DisplayID";
+    public static final String EXTRA_TEST_MODE = "TestMode";
 
     public static final String CLIPBOARD_IDENTIFIER = "ArtemisStreaming";
 
@@ -278,6 +279,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     private String uniqueId;
     private X509Certificate serverCert;
     private boolean vDisplay;
+    private boolean testMode;
     private ArrayList<String> serverCommands;
 
     private ViewParent rootView;
@@ -340,6 +342,11 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     @SuppressLint({"MissingInflatedId", "ClickableViewAccessibility"})
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // Must precede super.onCreate(): with AppCompat the sub-decor may be
+        // installed during super.onCreate(), which would make this call throw
+        // "requestFeature() must be called before adding content".
+        requestWindowFeature(Window.FEATURE_NO_TITLE);
+
         super.onCreate(savedInstanceState);
 
         instance = this;
@@ -347,8 +354,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
         UiHelper.setLocale(this);
 
-        // We don't want a title bar
-        requestWindowFeature(Window.FEATURE_NO_TITLE);
+        // (Title bar already disabled before super.onCreate; see above)
 
         // Read the stream preferences
         prefConfig = PreferenceConfiguration.readPreferences(this);
@@ -573,6 +579,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         vDisplay = Game.this.getIntent().getBooleanExtra(EXTRA_VDISPLAY, false);
         serverCommands = Game.this.getIntent().getStringArrayListExtra(EXTRA_SERVER_COMMANDS);
         boolean appSupportsHdr = Game.this.getIntent().getBooleanExtra(EXTRA_APP_HDR, false);
+        testMode = Game.this.getIntent().getBooleanExtra(EXTRA_TEST_MODE, false);
         byte[] derCertData = Game.this.getIntent().getByteArrayExtra(EXTRA_SERVER_CERT);
 
         app = new NvApp(appName != null ? appName : "app", appUUID, appId, appSupportsHdr);
@@ -866,8 +873,20 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
         streamContainer.setOnSurfaceAvailable(() -> {
             if (!attemptedConnection) {
-                LimeLog.info("Surface is available, starting connection...");
                 attemptedConnection = true;
+
+                if (testMode) {
+                    // Test mode: show the (black) stream surface without
+                    // connecting to a host, for UI testing.
+                    LimeLog.info("Test mode: skipping connection, showing black screen");
+                    if (spinner != null) {
+                        spinner.dismiss();
+                        spinner = null;
+                    }
+                    return;
+                }
+
+                LimeLog.info("Surface is available, starting connection...");
 
                 // Der Decoder erhält die jeweils aktive Oberfläche vom Container
                 decoderRenderer.setRenderTarget(streamContainer.getSurface());
@@ -878,7 +897,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
             }
         });
 
-        gameMenuCallbacks = new GameMenu(this);
+        gameMenuCallbacks = new GameSideMenu(this);
 
         floatingMenuButton = findViewById(R.id.floatingMenuButton);
         updateFloatingButtonVisibility(prefConfig.enableBackMenu && prefConfig.enableFloatingButton);
@@ -2073,6 +2092,14 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
             return true;
         }
 
+        // Route keys to the side overlay menu while it's open so the
+        // controller navigates the menu instead of the stream.
+        if (gameMenuCallbacks instanceof GameSideMenu
+                && ((GameSideMenu) gameMenuCallbacks).isMenuOpen()
+                && ((GameSideMenu) gameMenuCallbacks).handleMenuKeyDown(event)) {
+            return true;
+        }
+
         boolean handled = false;
 
         if (ControllerHandler.isGameControllerDevice(event.getDevice())) {
@@ -2160,6 +2187,14 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
             // Always return true, otherwise the back press will be propagated
             // up to the parent and finish the activity.
+            return true;
+        }
+
+        // Swallow the key-up of anything the side overlay menu consumed,
+        // so releases don't leak to the stream (or START-hold tracking).
+        if (gameMenuCallbacks instanceof GameSideMenu
+                && ((GameSideMenu) gameMenuCallbacks).isMenuOpen()
+                && ((GameSideMenu) gameMenuCallbacks).handleMenuKeyUp(event)) {
             return true;
         }
 
@@ -2769,6 +2804,14 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     // Returns true if the event was consumed
     // NB: View is only present if called from a view callback
     public boolean handleMotionEvent(View view, MotionEvent event) {
+        // Route joystick/hat motion to the side overlay menu while it's open
+        if (gameMenuCallbacks instanceof GameSideMenu
+                && ((GameSideMenu) gameMenuCallbacks).isMenuOpen()
+                && event.getActionMasked() == MotionEvent.ACTION_MOVE
+                && ((GameSideMenu) gameMenuCallbacks).handleMenuMotionEvent(event)) {
+            return true;
+        }
+
         // Pass through mouse/touch/joystick input if we're not grabbing
         if (!grabbedInput) {
             return false;

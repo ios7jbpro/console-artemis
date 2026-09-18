@@ -12,6 +12,7 @@ import androidx.annotation.RequiresApi;
 
 import com.limelight.AppView;
 import com.limelight.Game;
+import com.limelight.PcView;
 import com.limelight.LimeLog;
 import com.limelight.R;
 import com.limelight.ShortcutTrampoline;
@@ -147,6 +148,22 @@ public class ServerHelper {
     ) {
         if (computer.state == ComputerDetails.State.OFFLINE || computer.activeAddress == null) {
             Toast.makeText(parent, parent.getString(R.string.pair_pc_offline), Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // Built-in test entries stream a black screen with no host behind them
+        if (PcView.isTestModeComputer(computer.uuid)) {
+            Intent testIntent = new Intent(parent, Game.class);
+            testIntent.putExtra(Game.EXTRA_HOST, "0.0.0.0");
+            testIntent.putExtra(Game.EXTRA_PORT, NvHTTP.DEFAULT_HTTP_PORT);
+            testIntent.putExtra(Game.EXTRA_APP_NAME, app.getAppName());
+            testIntent.putExtra(Game.EXTRA_APP_UUID, app.getAppUUID());
+            testIntent.putExtra(Game.EXTRA_APP_ID, app.getAppId());
+            testIntent.putExtra(Game.EXTRA_UNIQUEID, "test-mode");
+            testIntent.putExtra(Game.EXTRA_PC_UUID, computer.uuid);
+            testIntent.putExtra(Game.EXTRA_PC_NAME, computer.name);
+            testIntent.putExtra(Game.EXTRA_TEST_MODE, true);
+            parent.startActivity(testIntent);
             return;
         }
 

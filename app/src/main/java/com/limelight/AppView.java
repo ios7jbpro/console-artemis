@@ -5,7 +5,6 @@ import java.io.StringReader;
 import java.util.HashSet;
 import java.util.List;
 
-import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 import com.limelight.computers.ComputerManagerListener;
 import com.limelight.computers.ComputerManagerService;
 import com.limelight.grid.AppGridAdapter;
@@ -15,8 +14,6 @@ import com.limelight.nvstream.http.NvHTTP;
 import com.limelight.nvstream.http.PairingManager;
 import com.limelight.preferences.PreferenceConfiguration;
 import com.limelight.profiles.ProfilesManager;
-import com.limelight.ui.AdapterFragment;
-import com.limelight.ui.AdapterFragmentCallbacks;
 import com.limelight.utils.CacheHelper;
 import com.limelight.utils.Dialog;
 import com.limelight.utils.ServerHelper;
@@ -42,23 +39,41 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ContextMenu.ContextMenuInfo;
-import android.widget.AbsListView;
-import android.widget.AdapterView;
-import android.widget.AdapterView.OnItemClickListener;
+import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.widget.AdapterView.AdapterContextMenuInfo;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
 import org.xmlpull.v1.XmlPullParserException;
 
-public class AppView extends AppCompatActivity implements AdapterFragmentCallbacks {
+public class AppView extends AppCompatActivity {
     private AppGridAdapter appGridAdapter;
     private String uuidString;
     private ShortcutHelper shortcutHelper;
+    private LinearLayout appRow;
+    private HorizontalScrollView appRowScroller;
+    private TextView appFocusedName;
+    private TextView appFocusedStatus;
+    private TextView psClock;
+    private AppObject contextMenuApp;
+    private View contextMenuAppView;
+    private int focusedAppId = -1;
+    private final android.os.Handler clockHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable clockTick = new Runnable() {
+        @Override
+        public void run() {
+            if (psClock != null) {
+                psClock.setText(android.text.format.DateFormat.getTimeFormat(AppView.this)
+                        .format(new java.util.Date()));
+            }
+            clockHandler.postDelayed(this, 20000);
+        }
+    };
 
     private ComputerDetails computer;
     private ComputerManagerService.ApplistPoller poller;
@@ -71,6 +86,7 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
     private HashSet<Integer> hiddenAppIds = new HashSet<>();
 
     private PreferenceConfiguration prefConfig;
+    private boolean testMode;
 
     private final static int START_OR_RESUME_ID = 1;
     private final static int QUIT_ID = 2;
@@ -101,6 +117,13 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
                 public void run() {
                     // Wait for the binder to be ready
                     localBinder.waitForReady();
+
+                    // Built-in test entries use fake data so UI can be
+                    // exercised without a host behind them.
+                    if (PcView.isTestModeComputer(uuidString)) {
+                        setupTestMode(localBinder);
+                        return;
+                    }
 
                     // Get the computer object
                     computer = localBinder.getComputer(uuidString);
@@ -147,16 +170,7 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
                                 return;
                             }
 
-                            // Despite my best efforts to catch all conditions that could
-                            // cause the activity to be destroyed when we try to commit
-                            // I haven't been able to, so we have this try-catch block.
-                            try {
-                                getFragmentManager().beginTransaction()
-                                        .replace(R.id.appFragmentContainer, new AdapterFragment())
-                                        .commitAllowingStateLoss();
-                            } catch (IllegalStateException e) {
-                                e.printStackTrace();
-                            }
+                            refreshAppRow();
                         }
                     });
                 }
@@ -167,6 +181,53 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
             managerBinder = null;
         }
     };
+
+    // Sets up a fake host + app list for the built-in test entries.
+    // Runs on a background thread; posts UI work itself.
+    private void setupTestMode(final ComputerManagerService.ComputerManagerBinder localBinder) {
+        testMode = true;
+
+        computer = new ComputerDetails();
+        computer.name = getIntent().getStringExtra(NAME_EXTRA);
+        if (computer.name == null) {
+            computer.name = "Test mode";
+        }
+        computer.uuid = uuidString;
+        computer.state = ComputerDetails.State.ONLINE;
+        computer.pairState = PairingManager.PairState.PAIRED;
+        computer.activeAddress = new ComputerDetails.AddressTuple("0.0.0.0", NvHTTP.DEFAULT_HTTP_PORT);
+        computer.runningGameId = 0;
+
+        try {
+            appGridAdapter = new AppGridAdapter(AppView.this,
+                    PreferenceConfiguration.readPreferences(AppView.this),
+                    computer, "test-mode",
+                    showHiddenApps);
+        } catch (Exception e) {
+            e.printStackTrace();
+            finish();
+            return;
+        }
+
+        appGridAdapter.updateHiddenApps(hiddenAppIds, true);
+
+        // Binder is real, but we skip polling: there is no host to poll.
+        managerBinder = localBinder;
+
+        // updateUiWithAppList() refreshes the row on the UI thread.
+        // No extra rebuild here: a second rebuild would destroy the
+        // focused tile just as it gains focus.
+        updateUiWithAppList(buildTestApps());
+        updateUiWithServerinfo(computer);
+    }
+
+    private List<NvApp> buildTestApps() {
+        List<NvApp> apps = new java.util.ArrayList<>();
+        for (int i = 1; i <= 8; i++) {
+            apps.add(new NvApp("Test Game " + i, null, i, false));
+        }
+        return apps;
+    }
 
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
@@ -180,20 +241,19 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
             // Update the app grid adapter to create grid items with the correct layout
             appGridAdapter.updateLayoutWithPreferences(this, this.prefConfig);
 
-            try {
-                // Reinflate the app grid itself to pick up the layout change
-                getFragmentManager().beginTransaction()
-                        .replace(R.id.appFragmentContainer, new AdapterFragment())
-                        .commitAllowingStateLoss();
-            } catch (IllegalStateException e) {
-                e.printStackTrace();
-            }
+            // Rebuild the row to pick up the layout change
+            refreshAppRow();
         }
     }
 
     private void startComputerUpdates() {
         // Don't start polling if we're not bound or in the foreground
         if (managerBinder == null || !inForeground) {
+            return;
+        }
+
+        // Test mode has no host to poll
+        if (testMode) {
             return;
         }
 
@@ -331,11 +391,218 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
         setTitle(computerName);
         label.setText(computerName);
 
+        appRow = findViewById(R.id.appRow);
+        appRowScroller = findViewById(R.id.appRowScroller);
+        appFocusedName = findViewById(R.id.appFocusedName);
+        appFocusedStatus = findViewById(R.id.appFocusedStatus);
+        psClock = findViewById(R.id.psClock);
+
         this.prefConfig = PreferenceConfiguration.readPreferences(this);
 
         // Bind to the computer manager service
         bindService(new Intent(this, ComputerManagerService.class), serviceConnection,
                 Service.BIND_AUTO_CREATE);
+    }
+
+    private void startClock() {
+        clockHandler.removeCallbacks(clockTick);
+        clockHandler.post(clockTick);
+    }
+
+    private void stopClock() {
+        clockHandler.removeCallbacks(clockTick);
+    }
+
+    // Rebuilds the horizontal game row from the adapter, preserving focus.
+    // Test entries get icon tiles like the home screen; real hosts show
+    // the box art provided by the host (or its placeholder).
+    private void refreshAppRow() {
+        if (appRow == null || appGridAdapter == null) {
+            return;
+        }
+
+        int keepFocusId = focusedAppId;
+        appRow.removeAllViews();
+
+        float density = getResources().getDisplayMetrics().density;
+        int tileMargin = (int) (10 * density + 0.5f);
+
+        for (int i = 0; i < appGridAdapter.getCount(); i++) {
+            final AppObject appObj = (AppObject) appGridAdapter.getItem(i);
+
+            FrameLayout wrapper = new FrameLayout(this);
+            wrapper.setFocusable(true);
+            wrapper.setFocusableInTouchMode(true);
+            wrapper.setBackgroundResource(R.drawable.ps_tile);
+            int pad = (int) (4 * density + 0.5f);
+            wrapper.setPadding(pad, pad, pad, pad);
+            wrapper.setTag(appObj);
+
+            View content;
+            if (testMode) {
+                ImageView icon = new ImageView(this);
+                icon.setImageResource(R.drawable.ic_computer);
+                int iconSize = (int) (84 * density + 0.5f);
+                FrameLayout.LayoutParams iconParams = new FrameLayout.LayoutParams(iconSize, iconSize);
+                iconParams.gravity = android.view.Gravity.CENTER;
+                icon.setLayoutParams(iconParams);
+                content = icon;
+            } else {
+                content = appGridAdapter.getView(i, null, appRow);
+                content.setFocusable(false);
+            }
+            wrapper.addView(content);
+
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT);
+            params.setMargins(tileMargin, tileMargin, tileMargin, tileMargin);
+            wrapper.setLayoutParams(params);
+
+            wrapper.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+                @Override
+                public void onFocusChange(View v, boolean hasFocus) {
+                    if (hasFocus) {
+                        focusedAppId = appObj.app.getAppId();
+                        updateAppFocus(appObj);
+                        v.animate().scaleX(1.1f).scaleY(1.1f).setDuration(150).start();
+                        appRowScroller.smoothScrollTo(
+                                v.getLeft() - (appRowScroller.getWidth() - v.getWidth()) / 2, 0);
+                    } else {
+                        v.animate().scaleX(1.0f).scaleY(1.0f).setDuration(150).start();
+                    }
+                }
+            });
+            wrapper.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    handleAppClick(appObj);
+                }
+            });
+            wrapper.setOnLongClickListener(new View.OnLongClickListener() {
+                @Override
+                public boolean onLongClick(View v) {
+                    contextMenuApp = appObj;
+                    contextMenuAppView = v;
+                    v.showContextMenu();
+                    return true;
+                }
+            });
+            registerForContextMenu(wrapper);
+
+            appRow.addView(wrapper);
+        }
+
+        // Restore focus to the previously focused game (or the first one)
+        View focusTarget = null;
+        View firstTile = null;
+        for (int i = 0; i < appRow.getChildCount(); i++) {
+            View child = appRow.getChildAt(i);
+            if (firstTile == null) {
+                firstTile = child;
+            }
+            AppObject tag = (AppObject) child.getTag();
+            if (tag != null && tag.app.getAppId() == keepFocusId) {
+                focusTarget = child;
+                break;
+            }
+        }
+        if (focusTarget == null) {
+            focusTarget = firstTile;
+        }
+        if (focusTarget != null) {
+            AppObject tag = (AppObject) focusTarget.getTag();
+            if (tag != null) {
+                focusedAppId = tag.app.getAppId();
+                updateAppFocus(tag);
+            }
+        }
+
+        ensureRowFocus();
+    }
+
+    // Guarantees a row tile holds focus whenever the row is non-empty and
+    // nothing inside it is focused (initial load, return from another
+    // activity, or a rebuild that detached the focused tile).
+    private void ensureRowFocus() {
+        if (appRow == null || appRow.getChildCount() == 0) {
+            return;
+        }
+        View focused = getCurrentFocus();
+        if (focused != null) {
+            android.view.ViewParent parent = focused.getParent();
+            while (parent != null) {
+                if (parent == appRow) {
+                    return;
+                }
+                parent = parent.getParent();
+            }
+        }
+        View target = null;
+        View firstTile = null;
+        for (int i = 0; i < appRow.getChildCount(); i++) {
+            View child = appRow.getChildAt(i);
+            if (firstTile == null) {
+                firstTile = child;
+            }
+            AppObject tag = (AppObject) child.getTag();
+            if (tag != null && tag.app.getAppId() == focusedAppId) {
+                target = child;
+                break;
+            }
+        }
+        if (target == null) {
+            target = firstTile;
+        }
+        if (target != null) {
+            if (!target.requestFocus()) {
+                final View retry = target;
+                appRow.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        retry.requestFocus();
+                    }
+                });
+            }
+        }
+    }
+
+    private void updateAppFocus(AppObject appObj) {
+        if (appFocusedName == null) {
+            return;
+        }
+        appFocusedName.setText(appObj.app.getAppName());
+        if (appObj.isRunning) {
+            appFocusedStatus.setText(R.string.ps_status_running);
+        } else if (appObj.isHidden) {
+            appFocusedStatus.setText(R.string.ps_status_hidden);
+        } else {
+            appFocusedStatus.setText("");
+        }
+    }
+
+    private void handleAppClick(AppObject app) {
+        // Only open the context menu if something is running, otherwise start it
+        if (lastRunningAppId != 0) {
+            if (prefConfig.resumeWithoutConfirm && lastRunningAppId == app.app.getAppId()) {
+                ServerHelper.doStart(AppView.this, app.app, computer, managerBinder, prefConfig.useVirtualDisplay);
+            } else {
+                contextMenuApp = app;
+                contextMenuAppView = appRow;
+                appRow.showContextMenu();
+            }
+        } else {
+            if (prefConfig.useVirtualDisplay && !(computer.vDisplaySupported && computer.vDisplayDriverReady)) {
+                UiHelper.displayVdisplayConfirmationDialog(
+                        AppView.this,
+                        computer,
+                        () -> ServerHelper.doStart(AppView.this, app.app, computer, managerBinder, true),
+                        null
+                );
+            } else {
+                ServerHelper.doStart(AppView.this, app.app, computer, managerBinder, prefConfig.useVirtualDisplay);
+            }
+        }
     }
 
     private void updateHiddenApps(boolean hideImmediately) {
@@ -397,8 +664,17 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
 
         inForeground = true;
         startComputerUpdates();
+        startClock();
+        if (appRow != null) {
+            appRow.post(new Runnable() {
+                @Override
+                public void run() {
+                    ensureRowFocus();
+                }
+            });
+        }
 
-        ExtendedFloatingActionButton profilesButton = findViewById(R.id.profilesButton);
+        android.widget.ImageButton profilesButton = findViewById(R.id.profilesButton);
         // User report Samsung and Xiaomi devices have this problem
         // Why just these two brands have the most problems?
         if (profilesButton == null) {
@@ -406,10 +682,12 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
         }
         String activeProfileName = ProfilesManager.getInstance().getActiveName();
         if (activeProfileName.isEmpty()) {
-            profilesButton.shrink();
+            profilesButton.setContentDescription(getString(R.string.profile_manager_choose_profile));
+            profilesButton.setAlpha(0.55f);
         } else {
-            profilesButton.setText(activeProfileName);
-            profilesButton.extend();
+            profilesButton.setContentDescription(
+                    getString(R.string.profile_manager_choose_profile) + ": " + activeProfileName);
+            profilesButton.setAlpha(1.0f);
         }
     }
 
@@ -419,6 +697,7 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
 
         inForeground = false;
         stopComputerUpdates();
+        stopClock();
     }
 
     @Override
@@ -444,8 +723,10 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
     public void onCreateContextMenu(ContextMenu menu, View v, ContextMenuInfo menuInfo) {
         super.onCreateContextMenu(menu, v, menuInfo);
 
-        AdapterContextMenuInfo info = (AdapterContextMenuInfo) menuInfo;
-        AppObject selectedApp = (AppObject) appGridAdapter.getItem(info.position);
+        AppObject selectedApp = contextMenuApp;
+        if (selectedApp == null) {
+            return;
+        }
 
         menu.setHeaderTitle(selectedApp.app.getAppName());
 
@@ -480,10 +761,10 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
 
         menu.add(Menu.NONE, VIEW_DETAILS_ID, 4, getResources().getString(R.string.applist_menu_details));
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && contextMenuAppView != null) {
             // Only add an option to create shortcut if box art is loaded
             // and when we're in grid-mode (not list-mode).
-            ImageView appImageView = info.targetView.findViewById(R.id.grid_image);
+            ImageView appImageView = contextMenuAppView.findViewById(R.id.grid_image);
             if (appImageView != null) {
                 // We have a grid ImageView, so we must be in grid-mode
                 BitmapDrawable drawable = (BitmapDrawable)appImageView.getDrawable();
@@ -503,8 +784,10 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
 
     @Override
     public boolean onContextItemSelected(MenuItem item) {
-        AdapterContextMenuInfo info = (AdapterContextMenuInfo) item.getMenuInfo();
-        final AppObject app = (AppObject) appGridAdapter.getItem(info.position);
+        final AppObject app = contextMenuApp;
+        if (app == null) {
+            return super.onContextItemSelected(item);
+        }
         int itemId = item.getItemId();
         switch (itemId) {
             case START_WITH_QUIT:
@@ -587,11 +870,15 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
                     hiddenAppIds.add(app.app.getAppId());
                 }
                 updateHiddenApps(false);
+                refreshAppRow();
                 return true;
             }
 
             case CREATE_SHORTCUT_ID: {
-                ImageView appImageView = info.targetView.findViewById(R.id.grid_image);
+                if (contextMenuAppView == null) {
+                    return true;
+                }
+                ImageView appImageView = contextMenuAppView.findViewById(R.id.grid_image);
                 Bitmap appBits = ((BitmapDrawable) appImageView.getDrawable()).getBitmap();
                 if (!shortcutHelper.createPinnedGameShortcut(computer, app.app, appBits)) {
                     Toast.makeText(AppView.this, getResources().getString(R.string.unable_to_pin_shortcut), Toast.LENGTH_LONG).show();
@@ -655,6 +942,7 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
 
                 if (updated) {
                     appGridAdapter.notifyDataSetChanged();
+                    refreshAppRow();
                 }
             }
         });
@@ -729,50 +1017,10 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
 
                 if (updated) {
                     appGridAdapter.notifyDataSetChanged();
+                    refreshAppRow();
                 }
             }
         });
-    }
-
-    @Override
-    public int getAdapterFragmentLayoutId() {
-        return PreferenceConfiguration.readPreferences(AppView.this).smallIconMode ?
-                    R.layout.app_grid_view_small : R.layout.app_grid_view;
-    }
-
-    @Override
-    public void receiveAbsListView(AbsListView listView) {
-        listView.setAdapter(appGridAdapter);
-        listView.setOnItemClickListener(new OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> arg0, View arg1, int pos,
-                                    long id) {
-                AppObject app = (AppObject) appGridAdapter.getItem(pos);
-
-                // Only open the context menu if something is running, otherwise start it
-                if (lastRunningAppId != 0) {
-                    if (prefConfig.resumeWithoutConfirm && lastRunningAppId == app.app.getAppId()) {
-                        ServerHelper.doStart(AppView.this, app.app, computer, managerBinder, prefConfig.useVirtualDisplay);
-                    } else {
-                        openContextMenu(arg1);
-                    }
-                } else {
-                    if (prefConfig.useVirtualDisplay && !(computer.vDisplaySupported && computer.vDisplayDriverReady)) {
-                        UiHelper.displayVdisplayConfirmationDialog(
-                                AppView.this,
-                                computer,
-                                () -> ServerHelper.doStart(AppView.this, app.app, computer, managerBinder, true),
-                                null
-                        );
-                    } else {
-                        ServerHelper.doStart(AppView.this, app.app, computer, managerBinder, prefConfig.useVirtualDisplay);
-                    }
-                }
-            }
-        });
-        UiHelper.applyStatusBarPadding(listView);
-        registerForContextMenu(listView);
-        listView.requestFocus();
     }
 
     public static class AppObject {

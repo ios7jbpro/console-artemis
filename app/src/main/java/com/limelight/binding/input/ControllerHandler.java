@@ -2505,8 +2505,8 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
             // any action.
             if ((context.inputMap & ControllerPacket.PLAY_FLAG) != 0 &&
                     context.startUpTime - context.startDownTime > ControllerHandler.START_DOWN_TIME_MOUSE_MODE_MS) {
-                if (prefConfig.enableBackMenu && context.backMenuPending){
-                    //todo 展示快捷菜单
+                if (prefConfig.enableBackMenu){
+                    // Long-press START opens the side overlay menu
                     context.backMenuPending = false;
                     gestures.showGameMenu(context);
                 } else if (prefConfig.mouseEmulation) {

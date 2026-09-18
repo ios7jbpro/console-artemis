@@ -1,0 +1,32 @@
+<!-- PS4-inspired dynamic background: deep blue gradient with soft wave shapes -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="135"
+                android:startColor="#2B5EA7"
+                android:centerColor="#16336B"
+                android:endColor="#0A1836" />
+        </shape>
+    </item>
+    <!-- Light wave sweeping in from the top right -->
+    <item
+        android:left="180dp"
+        android:top="-260dp"
+        android:right="-160dp"
+        android:bottom="80dp">
+        <shape android:shape="oval">
+            <solid android:color="#1AFFFFFF" />
+        </shape>
+    </item>
+    <!-- Dark wave rising from the bottom left -->
+    <item
+        android:left="-120dp"
+        android:top="320dp"
+        android:right="140dp"
+        android:bottom="-260dp">
+        <shape android:shape="oval">
+            <solid android:color="#14000000" />
+        </shape>
+    </item>
+</layer-list>

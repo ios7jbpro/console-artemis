@@ -1,0 +1,24 @@
+<!-- PS4-style content tile: dim tile, glowing light-blue border when focused -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="6dp" />
+            <solid android:color="#24508F" />
+            <stroke android:width="3dp" android:color="#8FC1FF" />
+        </shape>
+    </item>
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="6dp" />
+            <solid android:color="#24508F" />
+            <stroke android:width="3dp" android:color="#8FC1FF" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="6dp" />
+            <solid android:color="#80132449" />
+            <stroke android:width="1dp" android:color="#3D5A8C" />
+        </shape>
+    </item>
+</selector>

@@ -3,8 +3,6 @@ package com.limelight;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Toast;
@@ -12,7 +10,6 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.Toolbar;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceGroup;
 import androidx.preference.PreferenceManager;
@@ -42,11 +39,6 @@ public class EditProfileActivity extends AppCompatActivity {
 
         UiHelper.setLocale(this);
 
-        // Setup toolbar
-        Toolbar toolbar = findViewById(R.id.toolbar);
-        setSupportActionBar(toolbar);
-        getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-
         // Get profile UUID from intent
         profileUuid = getIntent().getStringExtra("profileUuid");
 
@@ -74,6 +66,16 @@ public class EditProfileActivity extends AppCompatActivity {
             inMemoryPrefs = new InMemorySharedPreferences(PreferenceManager.getDefaultSharedPreferences(this).getAll());
         }
 
+        // Setup header title and action buttons
+        android.widget.TextView titleView = findViewById(R.id.profileTitle);
+        if (currentProfile != null) {
+            titleView.setText(getString(R.string.profile_manager_edit_profile) + currentProfile.getName());
+        } else {
+            titleView.setText(R.string.profile_manager_new_profile);
+        }
+        findViewById(R.id.saveProfileButton).setOnClickListener(v -> saveProfile());
+        findViewById(R.id.renameProfileButton).setOnClickListener(v -> showRenameDialog());
+
         prefsFragment = new ProfilePreferenceFragment(this, inMemoryPrefs);
 
         // Load preference fragment
@@ -82,31 +84,107 @@ public class EditProfileActivity extends AppCompatActivity {
             .replace(R.id.preferences_container, prefsFragment)
             .commit();
 
+        buildSidebar();
+
         UiHelper.notifyNewRootView(this);
     }
 
     @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        getMenuInflater().inflate(R.menu.edit_profile_menu, menu);
-        return true;
+    protected void onResume() {
+        super.onResume();
+        // The fragment commits asynchronously; apply the selected category
+        // page once it is ready.
+        findViewById(R.id.preferences_container).post(new Runnable() {
+            @Override
+            public void run() {
+                applySidebarSelection();
+            }
+        });
     }
 
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        int id = item.getItemId();
+    // Category sidebar, identical to the main settings screen: each row
+    // switches the preference list to that category's page.
+    private final java.util.List<android.widget.TextView> sidebarRows = new java.util.ArrayList<>();
+    private int sidebarSelected = 0;
 
-        if (id == android.R.id.home) {
-            finish();
-            return true;
-        } else if (id == R.id.action_save) {
-            saveProfile();
-            return true;
-        } else if (id == R.id.action_rename) {
-            showRenameDialog();
-            return true;
+    private void buildSidebar() {
+        android.widget.LinearLayout sidebar = findViewById(R.id.profileEditSidebar);
+        if (sidebar == null) {
+            return;
+        }
+        sidebar.removeAllViews();
+        sidebarRows.clear();
+
+        float density = getResources().getDisplayMetrics().density;
+        int pad = (int) (12 * density + 0.5f);
+
+        for (int i = 0; i < StreamSettings.SIDEBAR_TITLES.length; i++) {
+            final int index = i;
+            android.widget.TextView row = new android.widget.TextView(this);
+            row.setText(StreamSettings.SIDEBAR_TITLES[i]);
+            row.setTextColor(0xFFFFFFFF);
+            row.setTextSize(16);
+            row.setPadding(pad, pad, pad, pad);
+            row.setFocusable(true);
+            row.setFocusableInTouchMode(true);
+            row.setClickable(true);
+            row.setBackgroundResource(R.drawable.ps_tile);
+            row.setOnClickListener(new android.view.View.OnClickListener() {
+                @Override
+                public void onClick(android.view.View v) {
+                    selectSidebarCategory(index);
+                }
+            });
+            sidebarRows.add(row);
+            sidebar.addView(row);
         }
 
-        return super.onOptionsItemSelected(item);
+        markSidebarSelected(0);
+    }
+
+    private void selectSidebarCategory(int index) {
+        markSidebarSelected(index);
+        applySidebarSelection();
+    }
+
+    // Shows only the selected category's page, hiding all others.
+    private void applySidebarSelection() {
+        if (prefsFragment == null || sidebarSelected < 0
+                || sidebarSelected >= StreamSettings.SIDEBAR_KEYS.length) {
+            return;
+        }
+        try {
+            prefsFragment.showOnlyCategory(
+                    StreamSettings.SIDEBAR_KEYS[sidebarSelected], StreamSettings.SIDEBAR_KEYS);
+            syncSidebarVisibility();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Hides sidebar rows whose category was removed (e.g. touch-only
+    // categories on devices without a touchscreen).
+    private void syncSidebarVisibility() {
+        if (prefsFragment == null) {
+            return;
+        }
+        try {
+            for (int i = 0; i < StreamSettings.SIDEBAR_KEYS.length && i < sidebarRows.size(); i++) {
+                sidebarRows.get(i).setVisibility(
+                        prefsFragment.hasCategory(StreamSettings.SIDEBAR_KEYS[i])
+                                ? android.view.View.VISIBLE : android.view.View.GONE);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void markSidebarSelected(int index) {
+        sidebarSelected = index;
+        for (int i = 0; i < sidebarRows.size(); i++) {
+            sidebarRows.get(i).setBackgroundResource(
+                    i == index ? R.drawable.ps_row_selected : R.drawable.ps_tile);
+        }
     }
 
     void reloadSettings() {
@@ -114,6 +192,12 @@ public class EditProfileActivity extends AppCompatActivity {
         getSupportFragmentManager().beginTransaction().replace(
                 R.id.preferences_container, prefsFragment
         ).commitAllowingStateLoss();
+        try {
+            getSupportFragmentManager().executePendingTransactions();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        applySidebarSelection();
     }
 
     private void saveProfile() {

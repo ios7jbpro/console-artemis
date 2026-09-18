@@ -1,0 +1,7 @@
+<!-- Persistent selection highlight for sidebar rows (mirrors ps_tile focused look) -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="6dp" />
+    <solid android:color="#24508F" />
+    <stroke android:width="3dp" android:color="#8FC1FF" />
+</shape>

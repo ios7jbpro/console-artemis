@@ -86,6 +86,12 @@ public class StreamSettings extends AppCompatActivity {
         getSupportFragmentManager().beginTransaction().replace(
                 R.id.stream_settings, prefsFragment
         ).commitAllowingStateLoss();
+        try {
+            getSupportFragmentManager().executePendingTransactions();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        applySidebarSelection();
     }
 
     @Override
@@ -99,7 +105,123 @@ public class StreamSettings extends AppCompatActivity {
 
         setContentView(R.layout.activity_stream_settings);
 
+        buildSidebar();
+
 //        UiHelper.notifyNewRootView(this);
+    }
+
+    // Category sidebar: each row switches the preference list to that section.
+    // Titles (string res ids) parallel to SIDEBAR_KEYS below.
+    public static final int[] SIDEBAR_TITLES = {
+            R.string.category_video_settings,
+            R.string.category_audio_settings,
+            R.string.category_gamepad_settings,
+            R.string.category_input_settings,
+            R.string.category_host_settings,
+            R.string.category_general_settings,
+            R.string.category_ui_settings,
+            R.string.category_on_screen_controls_settings,
+            R.string.title_special_key_layout,
+            R.string.title_virtual_trackpad_settings,
+            R.string.category_perf_monitor_settings,
+            R.string.category_advanced_settings,
+            R.string.title_settings_misc,
+    };
+
+    public static final String[] SIDEBAR_KEYS = {
+            "category_video_settings",
+            "category_audio_settings",
+            "category_gamepad_settings",
+            "category_input_settings",
+            "category_host_settings",
+            "category_general_settings",
+            "category_ui_settings",
+            "category_onscreen_controls",
+            "category_special_key_layout",
+            "category_virtual_trackpad_settings",
+            "category_perf_monitor_settings",
+            "category_advanced_settings",
+            "category_settings_misc",
+    };
+
+    private final java.util.List<android.widget.TextView> sidebarRows = new java.util.ArrayList<>();
+    private int sidebarSelected = 0;
+
+    private void buildSidebar() {
+        android.widget.LinearLayout sidebar = findViewById(R.id.settingsSidebar);
+        if (sidebar == null) {
+            return;
+        }
+        sidebar.removeAllViews();
+        sidebarRows.clear();
+
+        float density = getResources().getDisplayMetrics().density;
+        int pad = (int) (12 * density + 0.5f);
+
+        for (int i = 0; i < SIDEBAR_TITLES.length; i++) {
+            final int index = i;
+            android.widget.TextView row = new android.widget.TextView(this);
+            row.setText(SIDEBAR_TITLES[i]);
+            row.setTextColor(0xFFFFFFFF);
+            row.setTextSize(16);
+            row.setPadding(pad, pad, pad, pad);
+            row.setFocusable(true);
+            row.setFocusableInTouchMode(true);
+            row.setClickable(true);
+            row.setBackgroundResource(R.drawable.ps_tile);
+            row.setOnClickListener(new android.view.View.OnClickListener() {
+                @Override
+                public void onClick(android.view.View v) {
+                    selectSidebarCategory(index);
+                }
+            });
+            sidebarRows.add(row);
+            sidebar.addView(row);
+        }
+
+        markSidebarSelected(0);
+    }
+
+    private void selectSidebarCategory(int index) {
+        markSidebarSelected(index);
+        applySidebarSelection();
+    }
+
+    // Shows only the selected category's page, hiding all others.
+    private void applySidebarSelection() {
+        if (prefsFragment == null || sidebarSelected < 0 || sidebarSelected >= SIDEBAR_KEYS.length) {
+            return;
+        }
+        try {
+            prefsFragment.showOnlyCategory(SIDEBAR_KEYS[sidebarSelected], SIDEBAR_KEYS);
+            syncSidebarVisibility();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Hides sidebar rows whose category was removed (e.g. touch-only
+    // categories on devices without a touchscreen).
+    private void syncSidebarVisibility() {
+        if (prefsFragment == null) {
+            return;
+        }
+        try {
+            for (int i = 0; i < SIDEBAR_KEYS.length && i < sidebarRows.size(); i++) {
+                sidebarRows.get(i).setVisibility(
+                        prefsFragment.hasCategory(SIDEBAR_KEYS[i]) ? View.VISIBLE : View.GONE);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void markSidebarSelected(int index) {
+        sidebarSelected = index;
+        for (int i = 0; i < sidebarRows.size(); i++) {
+            sidebarRows.get(i).setBackgroundResource(
+                    i == index ? R.drawable.ps_row_selected : R.drawable.ps_tile);
+        }
     }
 
     @Override
@@ -330,6 +452,23 @@ public class StreamSettings extends AppCompatActivity {
         @Override
         public void onCreatePreferences(Bundle bundle, String s) {
             initializePreferences();
+        }
+
+        // Category pages: show only the selected category, hide the rest.
+        public void showOnlyCategory(String selectedKey, String[] allKeys) {
+            for (String key : allKeys) {
+                androidx.preference.Preference pref = findPreference(key);
+                if (pref != null) {
+                    pref.setVisible(key.equals(selectedKey));
+                }
+            }
+            if (getListView() != null) {
+                getListView().scrollToPosition(0);
+            }
+        }
+
+        public boolean hasCategory(String key) {
+            return findPreference(key) != null;
         }
 
         public void initializePreferences() {
