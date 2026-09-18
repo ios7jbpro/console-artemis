@@ -1,84 +1,84 @@
-# Artemis Android
+# Console Artemis
 
-Previously named Moonlight Noir
+A console-friendly fork of [Artemis Android](https://github.com/ClassicOldSong/moonlight-android) (formerly Moonlight Noir) — an open-source client for [Apollo](https://github.com/ClassicOldSong/Apollo) / [Sunshine](https://github.com/LizardByte/Sunshine).
 
-An open source client for [Apollo](https://github.com/ClassicOldSong/Apollo)/[Sunshine](https://github.com/LizardByte/Sunshine).
+Stream your PC games to your Android device, at home or over the internet, with a **PS4-inspired UI built for controller and TV / handheld use**.
 
-Artemis Android will allow you to stream your collection of games from your Windows PC to your Android device,
-whether in your own home or over the internet.
+Upstream base: Artemis Android brings all the Moonlight Noir improvements for desktop/office use (virtual display, server commands, clipboard sync with Apollo, custom resolutions/bitrates, virtual controls, etc.). See [Features from upstream](#features-from-upstream) below.
 
-Artemis is currently the best fork of Moonlight with loads of optimizations for office usage.
+## What changed in this fork?
 
-A more seamless experience with virtual display will be Artemis paired with [Apollo](https://github.com/ClassicOldSong/Apollo).
+PS4-like revamp focused on 10-foot / gamepad navigation:
 
-# Features
+- **PS4-style home**
+  - Horizontal host and game rows with large tiles, top status bar, and footer button hints.
+  - Shared `ps` theme (`ps_bg`, `ps_tile`, `ps_row_selected`).
+  - Focus-stable refresh — background polling updates rows without stealing gamepad focus.
+- **Controller-first navigation**
+  - D-pad / stick moves across rows, A / Start launches, B goes back.
+  - Designed for landscape TV, handhelds, and foldables.
+- **In-stream side menu**
+  - Hold **START** to open the `GameSideMenu` overlay instead of mouse emulation.
+  - Controller-navigable categories: keyboard, mouse mode, performance overlay, video actions, shortcuts, disconnect, etc.
+- **Sidebar settings**
+  - Stream Settings, Profiles, and Edit Profile screens use a left category sidebar + right content panel, navigable with a gamepad.
+- **Fullscreen immersive everywhere**
+  - All activities are landscape-only, edge-to-edge, with system bars hidden (`ArtemisApplication.applyFullscreen`).
+- **Host-free UI testing**
+  - Built-in **Test mode** adds fake hosts/games so you can try the PS4 layout, side menu, and focus handling without a real Apollo/Sunshine server.
 
-If you switch back to the main stream version, you'll be missing the following awesome features which are very unlikely to be added there:
+## Quick start
 
-1. Custom virtual buttons with import and export support.
-2. [Custom resolutions](https://github.com/moonlight-stream/moonlight-android/pull/1349).
-3. Custom bitrates.
-4. [Multiple mouse mode switching](https://github.com/moonlight-stream/moonlight-android/pull/1304) (normal mouse, [multi-touch](https://github.com/moonlight-stream/moonlight-android/pull/1364), touchpad, disabled, local cursor mode).
-5. Optimized virtual gamepad skins and free joystick.
-6. External monitor mode.
-7. Joycon D-pad support.
-8. Simplified performance information display.
-9. [Game back menu](https://github.com/moonlight-stream/moonlight-android/pull/1171).
-10. Custom shortcut commands.
-11. Easy soft keyboard switching.
-12. Portrait mode.
-13. Display on top mode, useful for foldable phones.
-14. [Virtual touchpad space and sensitivity adjustment](https://github.com/moonlight-stream/moonlight-android/issues/1348#issuecomment-2236344729) for playing right-click view games, such as Warcraft.
-15. Force use device's own vibration motor (in case your gamepad's vibration is not effective).
-16. Gamepad debugging page to view gamepad vibration and gyroscope information, as well as Android kernel version information.
-17. Trackpad tap/scrolling support
-18. Natural track pad mode with touch screen
-19. Non-QWERTY keyboard layout support
-20. Quick Meta key with physical BACK button
-21. Frame rate lock fix for some devices
-22. Video scale mode: Fit/Fill/Stretch
-23. View pan/zoom support
-24. Rotate screen in-game
-25. Add option to quit app directly
-26. Samsung DeX scrolling support
-27. Proper click/scroll/right-click for trackpad on generic Android tablet when using local cursor
-28. Virtual Display integration with [Apollo](https://github.com/ClassicOldSong/Apollo)
-29. Server Command integration with [Apollo](https://github.com/ClassicOldSong/Apollo)
-30. Clipboard sync (requires Apollo)
-31. SBS 3D for external Displays (Using AI MiDaS v2 Lite)
+1. Install Apollo (recommended) or Sunshine on your Windows PC.
+2. Install this app on your Android device / handheld / TV box.
+3. Pair once on the same network, then stream.
+4. Navigate with your controller; hold START in-game for options.
 
-# Disclaimer
-
-This is the `go away` version of Moonlight Android.
-
-I got kicked from Moonlight and Sunshine's Discord server literally for helping people out.
-
-This is what I got for finding a bug, opened an issue, getting no response, troubleshoot myself, fixed the issue myself, shared it by PR to the main repo hoping my efforts can help someone else during the maintainance gap.
-
-Yes, I'm going away. Fixes and improvements on this fork are not necessarily be merged to the main repo either. I have also started [a fork of Sunshine called Apollo](https://github.com/ClassicOldSong/Apollo) and will add useful features that will never get merged by the main repo shortly. [Apollo](https://github.com/ClassicOldSong/Apollo) and [Moonlight Noir](https://github.com/ClassicOldSong/moonlight-android) will no longer be compatible with OG Sunshine and OG Moonlight eventually, but they'll work even better with much more carefully designed features.
-
-The main repo had stayed silent for 5 months, with nobody actually responding to issues, and people are getting totally no help besides the limited FAQ in their Discord server. I tried to answer issues and questions, solve problems within my ablilty but I got kicked out just for helping others.
-
-**PRs for feature improvements are welcomed here unlike the main repo, your ideas are more likely to be appreciated and your efforts are actually being respected. We welcome people who can and willing to share their efforts, helping yourselves and other people in need.**
-
-**Update**: They have contacted me and apologized for this incident, but the fact it **happened** still motivated me to start my own fork.
+Tip: open Test mode hosts if you just want to preview the UI with no PC nearby.
 
 ## Downloads
+
 * [Download APK directly](https://github.com/ClassicOldSong/moonlight-android/releases)
 * [Use Obtainium](https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.limelight.noir%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FClassicOldSong%2Fmoonlight-android%22%2C%22author%22%3A%22ClassicOldSong%22%2C%22name%22%3A%22Artemis%22%2C%22additionalSettings%22%3A%22%7B%5C%22apkFilterRegEx%5C%22%3A%5C%22nonRoot%5C%22%2C%5C%22matchGroutToUse%5C%22%3A%5C%22%241%5C%22%2C%5C%22versionExtractionRegEx%5C%22%3A%5C%22v(.%2B)%5C%22%7D%22%7D) (recommended)
 
+Upstream releases live on ClassicOldSong/moonlight-android; this fork tracks `moonlight-noir`.
+
 ## Building
+
 * Install Android Studio and the Android NDK
-* Run ‘git submodule update --init --recursive’ from within moonlight-android/
-* In moonlight-android/, create a file called ‘local.properties’. Add an ‘ndk.dir=’ property to the local.properties file and set it equal to your NDK directory.
-* Build the APK using Android Studio or gradle
+* Run `git submodule update --init --recursive` from within this repo
+* Create `local.properties` with `ndk.dir=` pointing at your NDK directory
+* Build the APK with Android Studio or Gradle
+
+## Features from upstream
+
+Artemis Android (Moonlight Noir) adds over stock Moonlight:
+
+1. Custom virtual buttons with import/export
+2. Custom resolutions and bitrates
+3. Multiple mouse mode switching (normal, multi-touch, touchpad, disabled, local cursor)
+4. Optimized virtual gamepad skins and free joystick
+5. External monitor mode, Joycon D-pad support
+6. Simplified performance overlay, game back menu, custom shortcut commands
+7. Easy soft-keyboard switching, portrait mode, display-on-top mode for foldables
+8. Virtual touchpad area/sensitivity, device vibration override, gamepad debug page
+9. Trackpad tap/scroll, non-QWERTY layouts, quick Meta key, framerate-lock fix
+10. Video scale Fit/Fill/Stretch, in-game pan/zoom/rotate, quit-app option, Samsung DeX scroll fixes
+11. Virtual Display + Server Command + clipboard sync with Apollo, SBS 3D for external displays
+
+Full history and credits: see upstream repo.
+
+## Notes
+
+This is a UI-focused fork. Streaming, pairing, decoding, and input still follow upstream Artemis / Moonlight Android. Console-artemis only re-skins navigation (PcView/AppView, Profiles, Stream Settings, GameSideMenu) for gamepad use.
+
+Upstream project notice from ClassicOldSong: this line of forks exists because useful fixes were hard to land upstream. Feature PRs are welcome here.
 
 ## Authors
 
-* [Cameron Gutman](https://github.com/cgutman)  
-* [Diego Waxemberg](https://github.com/dwaxemberg)  
-* [Aaron Neyer](https://github.com/Aaronneyer)  
+* [Cameron Gutman](https://github.com/cgutman)
+* [Diego Waxemberg](https://github.com/dwaxemberg)
+* [Aaron Neyer](https://github.com/Aaronneyer)
 * [Andrew Hennessy](https://github.com/yetanothername)
 
-Moonlight is the work of students at [Case Western](http://case.edu) and was
-started as a project at [MHacks](http://mhacks.org).
+Moonlight was started by students at [Case Western](http://case.edu) as a project at [MHacks](http://mhacks.org).
