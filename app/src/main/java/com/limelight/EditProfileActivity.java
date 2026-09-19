@@ -135,6 +135,13 @@ public class EditProfileActivity extends AppCompatActivity {
                     selectSidebarCategory(index);
                 }
             });
+            // Like GameSideMenu: moving focus onto a category switches to it
+            // immediately, no A-press required. Click is kept for touch.
+            row.setOnFocusChangeListener((v, hasFocus) -> {
+                if (hasFocus) {
+                    selectSidebarCategory(index);
+                }
+            });
             sidebarRows.add(row);
             sidebar.addView(row);
         }
@@ -143,6 +150,9 @@ public class EditProfileActivity extends AppCompatActivity {
     }
 
     private void selectSidebarCategory(int index) {
+        if (index == sidebarSelected && prefsFragment != null) {
+            return;
+        }
         markSidebarSelected(index);
         applySidebarSelection();
     }

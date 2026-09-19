@@ -124,6 +124,15 @@ public class ProfilesActivity extends AppCompatActivity implements ProfilesManag
                 markSidebarSelected();
                 renderDetails();
             });
+            // Like GameSideMenu: moving focus onto a profile previews it
+            // immediately, no A-press required. Click is kept for touch.
+            row.setOnFocusChangeListener((v, hasFocus) -> {
+                if (hasFocus && !profile.getUuid().equals(selectedId)) {
+                    selectedId = profile.getUuid();
+                    markSidebarSelected();
+                    renderDetails();
+                }
+            });
             sidebarRows.add(row);
             sidebar.addView(row);
         }

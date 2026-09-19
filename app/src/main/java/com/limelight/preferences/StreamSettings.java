@@ -175,6 +175,13 @@ public class StreamSettings extends AppCompatActivity {
                     selectSidebarCategory(index);
                 }
             });
+            // Like GameSideMenu: moving focus onto a category switches to it
+            // immediately, no A-press required. Click is kept for touch.
+            row.setOnFocusChangeListener((v, hasFocus) -> {
+                if (hasFocus) {
+                    selectSidebarCategory(index);
+                }
+            });
             sidebarRows.add(row);
             sidebar.addView(row);
         }
@@ -183,6 +190,13 @@ public class StreamSettings extends AppCompatActivity {
     }
 
     private void selectSidebarCategory(int index) {
+        if (index == sidebarSelected) {
+            // Still apply once in case the fragment wasn't ready at build time
+            // (prefsFragment == null guard inside applySidebarSelection covers it).
+            if (prefsFragment != null) {
+                return;
+            }
+        }
         markSidebarSelected(index);
         applySidebarSelection();
     }
