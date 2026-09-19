@@ -187,6 +187,12 @@ public class GameSideMenu implements Game.GameMenuCallbacks {
         row.setPadding(dp(14), dp(12), dp(14), dp(12));
         row.setFocusable(false);
         row.setClickable(true);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        int gap = dp(4);
+        params.setMargins(0, gap, 0, gap);
+        row.setLayoutParams(params);
         return row;
     }
 

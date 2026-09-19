@@ -119,6 +119,12 @@ public class ProfilesActivity extends AppCompatActivity implements ProfilesManag
             row.setClickable(true);
             row.setBackgroundResource(profile.getUuid().equals(selectedId)
                     ? R.drawable.ps_row_selected : R.drawable.ps_tile);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT);
+            int gap = (int) (4 * density + 0.5f);
+            lp.setMargins(0, gap, 0, gap);
+            row.setLayoutParams(lp);
             row.setOnClickListener(v -> {
                 selectedId = profile.getUuid();
                 markSidebarSelected();

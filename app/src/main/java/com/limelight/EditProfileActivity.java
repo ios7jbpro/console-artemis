@@ -129,6 +129,13 @@ public class EditProfileActivity extends AppCompatActivity {
             row.setFocusableInTouchMode(true);
             row.setClickable(true);
             row.setBackgroundResource(R.drawable.ps_tile);
+            android.widget.LinearLayout.LayoutParams lp =
+                    new android.widget.LinearLayout.LayoutParams(
+                            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
+            int gap = (int) (4 * density + 0.5f);
+            lp.setMargins(0, gap, 0, gap);
+            row.setLayoutParams(lp);
             row.setOnClickListener(new android.view.View.OnClickListener() {
                 @Override
                 public void onClick(android.view.View v) {

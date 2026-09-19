@@ -2503,16 +2503,20 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
             // Sometimes we'll get a spurious key up event on controller disconnect.
             // Make sure it's real by checking that the key is actually down before taking
             // any action.
-            if ((context.inputMap & ControllerPacket.PLAY_FLAG) != 0 &&
+            cancelStartHoldMenu(context);
+            if (!context.startHoldMenuShown &&
+                    (context.inputMap & ControllerPacket.PLAY_FLAG) != 0 &&
                     context.startUpTime - context.startDownTime > ControllerHandler.START_DOWN_TIME_MOUSE_MODE_MS) {
                 if (prefConfig.enableBackMenu){
-                    // Long-press START opens the side overlay menu
+                    // Legacy fallback: menu wasn't auto-opened on hold
+                    // (e.g. hold detection was skipped), open it on release.
                     context.backMenuPending = false;
                     gestures.showGameMenu(context);
                 } else if (prefConfig.mouseEmulation) {
                     context.toggleMouseEmulation();
                 }
             }
+            context.startHoldMenuShown = false;
             context.inputMap &= ~ControllerPacket.PLAY_FLAG;
             break;
         case KeyEvent.KEYCODE_BACK:
@@ -2705,6 +2709,42 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
         return true;
     }
 
+    // Opens the side overlay menu while START is still held down, instead of
+    // waiting for the release. The START press is released to the host first
+    // so it doesn't stick: the physical key-up is swallowed by the open menu
+    // (Game routes keys to GameSideMenu while open) and would never clear it.
+    private void scheduleStartHoldMenu(InputDeviceContext context) {
+        cancelStartHoldMenu(context);
+        if (!prefConfig.enableBackMenu) {
+            return;
+        }
+        final InputDeviceContext target = context;
+        target.startHoldMenuShown = false;
+        target.startHoldMenuRunnable = new Runnable() {
+            @Override
+            public void run() {
+                target.startHoldMenuRunnable = null;
+                if ((target.inputMap & ControllerPacket.PLAY_FLAG) == 0) {
+                    return;
+                }
+                target.inputMap &= ~ControllerPacket.PLAY_FLAG;
+                target.backMenuPending = false;
+                target.startHoldMenuShown = true;
+                sendControllerInputPacket(target);
+                gestures.showGameMenu(target);
+            }
+        };
+        mainThreadHandler.postDelayed(target.startHoldMenuRunnable,
+                START_DOWN_TIME_MOUSE_MODE_MS);
+    }
+
+    private void cancelStartHoldMenu(InputDeviceContext context) {
+        if (context.startHoldMenuRunnable != null) {
+            mainThreadHandler.removeCallbacks(context.startHoldMenuRunnable);
+            context.startHoldMenuRunnable = null;
+        }
+    }
+
     public boolean handleButtonDown(KeyEvent event) {
         InputDeviceContext context = getContextForEvent(event);
         if (context == null) {
@@ -2734,6 +2774,7 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
                 } else {
                     context.backMenuPending = false;
                 }
+                scheduleStartHoldMenu(context);
             }
             context.inputMap |= ControllerPacket.PLAY_FLAG;
             break;
@@ -3188,6 +3229,12 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
         public long startUpTime = 0;
         public boolean backMenuPending = false;
 
+        // START-hold opens the side menu while still held (not on release).
+        // The pending runnable is cancelled on key-up; startHoldMenuShown
+        // suppresses the legacy release-trigger so the menu isn't toggled shut.
+        public boolean startHoldMenuShown = false;
+        public Runnable startHoldMenuRunnable = null;
+
         public final Runnable batteryStateUpdateRunnable = new Runnable() {
             @Override
             public void run() {
@@ -3238,6 +3285,11 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
             }
 
             backgroundThreadHandler.removeCallbacks(batteryStateUpdateRunnable);
+
+            if (startHoldMenuRunnable != null) {
+                mainThreadHandler.removeCallbacks(startHoldMenuRunnable);
+                startHoldMenuRunnable = null;
+            }
         }
 
         @Override
